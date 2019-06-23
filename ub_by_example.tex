@@ -1,0 +1,172 @@
+\documentclass{beamer}
+\usetheme{Hannover}
+
+\usepackage[utf8x]{inputenc}
+\usepackage{minted}
+
+\title{Undefined Behavior}
+\subtitle{Through real world examples}
+\author{Elazar Leibovich}
+\institute{Lightbits Labs}
+\date{\today}
+
+\begin{document}
+
+\begin{frame}
+\titlepage
+\end{frame}
+
+\section Integer Overflow
+
+\defverbatim[colored]\lstI{
+\begin{minted}{C}
+int foo (int x) {
+ return (x + 1) > x;
+}
+int main () {
+ printf("%d\n", (INT_MAX + 1) > INT_MAX);
+ printf("%d\n", foo(INT_MAX));
+ return 0;
+} 
+\end{minted}
+}
+
+\begin{frame}{What does it print?}
+\lstI
+\end{frame}
+
+\begin{frame}{UB is unstable}{UB can display incoherent behavior}
+\lstI
+\begin{block}{Output}
+gcc -O2 intmax-overflow.c ; ./a.out\\
+0\\
+1
+\end{block}
+\end{frame}
+
+\begin{frame}{UB is unstable}{UB can display incoherent behavior}
+\end{frame}
+
+\section Division by Zero
+
+\defverbatim[colored]\lstII{
+\begin{minted}{C}
+void f(int msize) {
+  if (!msize)
+    msize = 1 / msize; /* Provoke a signal. */
+}
+\end{minted}
+}
+
+\defverbatim[colored]\lstIIAsm{
+\begin{minted}{asm}
+; gcc -S -fno-asynchronous-unwind-tables -o- x.c
+f:
+  ret
+\end{minted}
+}
+
+\begin{frame}{UB can delete your code}{happened to a real project}
+\lstII
+Source: \hyperlink{https://lists.gnupg.org/pipermail/gcrypt-devel/2012-July/001958.html}{gcrypt-devel}
+\end{frame}
+
+\begin{frame}{UB can delete your code}{happened in gcrypt}
+\lstII
+\lstIIAsm
+\end{frame}
+
+\begin{frame}{UB can delete your code}{happened in gcrypt}
+  \begin{itemize}
+    \item Compiler see division by 0
+    \item It's UB, hence can't happen
+    \item Optimize away to no-op
+  \end{itemize}
+\end{frame}
+
+\section Division Overflow
+
+\defverbatim[colored]\lstIII{
+\begin{minted}{C}
+void f(int arg1, int arg2) {
+  int result = arg1 / arg2;
+  // Overflow check...
+  if (arg2 == -1 && arg1 < 0 && result <= 0)
+    ereport(ERROR,
+      (errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+      errmsg("bigint out of range")));
+}
+\end{minted}
+}
+
+\begin{frame}{Primary school math is tricky}{happened in Postgres}
+  \lstIII
+Where is the problem?
+\end{frame}
+
+\defverbatim[colored]\lstIIIrev{
+\begin{minted}{C}
+void f(int arg1, int arg2) {
+  assert(arg2 != 0);
+  int result = arg1 / arg2;
+  // Overflow check...
+  if (arg2 == -1 && arg1 < 0 && result <= 0)
+    ereport(ERROR,
+      (errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+      errmsg("bigint out of range")));
+}
+\end{minted}
+}
+
+\begin{frame}{Primary school math is tricky}{happened in Postgres}
+  \lstIIIrev
+Better now?
+\end{frame}
+
+\defverbatim[colored]\lstIIIasm{
+\begin{minted}{C}
+int result = arg1 / arg2;
+\end{minted}
+\begin{minted}{asm}
+ 	mov    %edi,%eax
+ 	cltd   ; sign extend eax to edx:eax
+ 	idiv   %esi ; eax = edx:eax / esi
+\end{minted}
+What does idiv do?
+}
+
+\begin{frame}{Division is tricky}{happened in Postgres}
+  \lstIIIasm
+\end{frame}
+
+\begin{frame}{Division is tricky}{happened in Postgres}
+  \begin{itemize}
+    \item Signed 8-bit integer range: $-128-127$
+    \item What's the result of $-128/-1$
+    \item UB
+    \item Postgres assumed it'll be rounded below 0
+  \end{itemize}
+\end{frame}
+
+\defverbatim\listIIIdivalg{
+\begin{minted}{C}
+int result = arg1 / arg2;
+temp ← AX / SRC; (* Signed division *)
+  IF (temp > 7FH) or (temp < 80H)
+  (* If a positive result is greater than 7FH or a negative result is less than 80H *)
+    THEN #DE; (* Divide error *)
+\end{minted}
+}
+
+\begin{frame}{Division is tricky}{happened in Postgres}
+  IDIV — Signed Divide\\
+temp ← AX / SRC; (* Signed division *) \\
+  IF ($temp > 7FH$) or ($temp < 80H$) \\
+  (* If a positive result is greater than 7FH or a negative result is less than 80H *) \\
+    THEN \#DE; (* Divide error *)\\\\
+
+  Source: \href{https://www.felixcloutier.com/x86/idiv}{Intel SDM}
+\end{frame}
+
+
+\end{document}
