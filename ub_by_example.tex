@@ -168,5 +168,25 @@ temp ← AX / SRC; (* Signed division *) \\
   Source: \href{https://www.felixcloutier.com/x86/idiv}{Intel SDM}
 \end{frame}
 
+\section Condition null and void
+
+\begin{frame}{UB affects unrelated code}{happened in kernel}
+
+  Source: \hyperlink{LWN}{https://lwn.net/Articles/342330/}
+\end{frame}
+
+\section NaCI
+
+\defverbatim\listVI{
+\begin{minted}{C}
+return addr & ~(uintptr_t)((1 << nap->align_boundary) - 1);
+\end{minted}
+}
+
+\begin{frame}{Even competent programmers does UB}{NacI case}
+
+  Source: \hyperlink{NaCI \#245}{http://code.google.com/p/nativeclient/issues/detail?id=245}
+\end{frame}
+
 
 \end{document}
